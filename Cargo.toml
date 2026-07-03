@@ -1,0 +1,8 @@
+[package]
+name = "delve"
+version = "0.1.0"
+edition = "2024"
+# a little roguelike game i made
+
+[dependencies]
+crossterm = "0.28"
