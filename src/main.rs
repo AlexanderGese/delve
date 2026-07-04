@@ -2,6 +2,7 @@
 
 mod geom;
 mod map;
+mod mapgen;
 mod rng;
 mod tile;
 
