@@ -1,6 +1,7 @@
 // delve - terminal roguelike. wiring the modules together as i go.
 
 mod color;
+mod entity;
 mod fov;
 mod geom;
 mod log;
