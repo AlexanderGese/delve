@@ -6,6 +6,7 @@ mod combat;
 mod entity;
 mod flavor;
 mod fov;
+mod game;
 mod geom;
 mod inventory;
 mod items;
