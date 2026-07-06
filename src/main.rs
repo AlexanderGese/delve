@@ -15,8 +15,10 @@ mod map;
 mod mapgen;
 mod monster;
 mod pathfind;
+mod render;
 mod rng;
 mod spawn;
 mod tile;
+mod ui;
 
 fn main() {}
