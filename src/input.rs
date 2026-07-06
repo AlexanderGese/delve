@@ -2,7 +2,7 @@
 // of movement schemes (wasd, arrows, and the classic roguelike hjkl+yubn) so
 // whatever you're used to should just work.
 
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use std::io;
 
 pub enum Action {
@@ -26,11 +26,15 @@ pub fn read_action() -> io::Result<Action> {
     }
 }
 
-// wait for one key press
+// wait for one key press. i ignore key-release/repeat events because some
+// terminals send them and it made everything move twice (took me a while to
+// realise that's what was happening)
 pub fn read_key() -> io::Result<KeyEvent> {
     loop {
         if let Event::Key(k) = event::read()? {
-            return Ok(k);
+            if k.kind == KeyEventKind::Press {
+                return Ok(k);
+            }
         }
     }
 }
