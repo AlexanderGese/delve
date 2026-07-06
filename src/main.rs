@@ -4,6 +4,7 @@ mod ai;
 mod color;
 mod combat;
 mod entity;
+mod flavor;
 mod fov;
 mod geom;
 mod inventory;
