@@ -256,4 +256,233 @@ impl Game {
     }
 
     // use or equip pack item number `idx`. returns true if it used up a turn
+    pub fn use_item(&mut self, idx: usize) -> bool {
+        if idx >= self.pack.len() {
+            return false;
+        }
+        match self.pack[idx].kind.clone() {
+            Kind::Potion(p) => {
+                let item = self.pack.remove(idx);
+                self.quaff(p, &item.name);
+                true
+            }
+            Kind::Scroll(s) => {
+                let item = self.pack.remove(idx);
+                self.read_scroll(s, &item.name);
+                true
+            }
+            Kind::Weapon { .. } => {
+                let item = self.pack.remove(idx);
+                let name = item.name.clone();
+                if let Some(old) = self.weapon.replace(item) {
+                    self.pack.push(old);
+                }
+                self.log.push(format!("You wield the {name}."));
+                true
+            }
+            Kind::Armor { .. } => {
+                let item = self.pack.remove(idx);
+                let name = item.name.clone();
+                if let Some(old) = self.armor.replace(item) {
+                    self.pack.push(old);
+                }
+                self.log.push(format!("You put on the {name}."));
+                true
+            }
+            Kind::Gold(_) => false,
+        }
+    }
+
+    fn quaff(&mut self, p: Potion, name: &str) {
+        match p {
+            Potion::Healing => {
+                let amount = self.rng.range(12, 24);
+                let got = self.player.stats.heal(amount);
+                self.log.push_colored(format!("You drink the {name}. You recover {got} HP."), color::HP_GOOD);
+            }
+            Potion::Strength => {
+                self.player.stats.power += 1;
+                self.log.push_colored(format!("You drink the {name}. You feel stronger!"), color::HP_GOOD);
+            }
+            Potion::Vitality => {
+                self.player.stats.max_hp += 5;
+                self.player.stats.hp += 5;
+                self.log.push_colored(format!("You drink the {name}. You feel more robust!"), color::HP_GOOD);
+            }
+        }
+    }
+
+    fn read_scroll(&mut self, s: Scroll, name: &str) {
+        self.log.push(format!("You read the {name}."));
+        match s {
+            Scroll::Teleport => {
+                if let Some(dest) = self.random_floor() {
+                    self.player.pos = dest;
+                    self.update_fov();
+                    self.log.push("The world blurs — you are somewhere else.");
+                }
+            }
+            Scroll::MagicMapping => {
+                self.map.reveal_all();
+                self.log.push("The layout of the level floods into your mind.");
+            }
+            Scroll::Lightning => {
+                if let Some(i) = self.nearest_visible_monster() {
+                    let dmg = self.rng.range(10, 16);
+                    self.monsters[i].stats.damage(dmg);
+                    let mname = self.monsters[i].name.clone();
+                    self.log.push_colored(format!("Lightning arcs into the {mname} for {dmg} damage!"), color::HILITE);
+                    if self.monsters[i].is_dead() {
+                        let mkname = self.monsters[i].name.clone();
+                        let xp = self.monsters[i].xp;
+                        let line = flavor::kill(&mut self.rng, &mkname);
+                        self.log.push_colored(line, color::HP_GOOD);
+                        self.monsters.remove(i);
+                        self.gain_xp(xp);
+                    }
+                } else {
+                    self.log.push("The lightning fizzles — nothing in sight.");
+                }
+            }
+            Scroll::EnchantWeapon => {
+                if let Some(Item { kind: Kind::Weapon { power }, name: wname, .. }) = self.weapon.as_mut() {
+                    *power += 1;
+                    self.log.push_colored(format!("Your {wname} glows sharper."), color::HILITE);
+                } else {
+                    self.log.push("You have no weapon to enchant.");
+                }
+            }
+        }
+    }
+
+    fn random_floor(&mut self) -> Option<Point> {
+        for _ in 0..200 {
+            let x = self.rng.range(1, self.map.w - 1);
+            let y = self.rng.range(1, self.map.h - 1);
+            let p = Point::new(x, y);
+            if self.map.walkable(p) && self.monster_at(p).is_none() && p != self.player.pos {
+                return Some(p);
+            }
+        }
+        None
+    }
+
+    fn nearest_visible_monster(&self) -> Option<usize> {
+        let p = self.player.pos;
+        self.monsters
+            .iter()
+            .enumerate()
+            .filter(|(_, m)| self.map.is_visible(m.pos))
+            .min_by_key(|(_, m)| m.pos.dist2(p))
+            .map(|(i, _)| i)
+    }
+
+    // hand out xp and level up if we crossed the threshold. the loop is in case
+    // one big kill is enough for two levels at once
+    fn gain_xp(&mut self, amount: i32) {
+        self.xp += amount;
+        while self.xp >= self.next_xp {
+            self.xp -= self.next_xp;
+            self.plevel += 1;
+            // each level needs ~50% more than the last. i just made these
+            // numbers up and playtested until it felt ok
+            self.next_xp = self.next_xp * 3 / 2 + 10;
+            self.player.stats.max_hp += 6;
+            self.player.stats.hp = self.player.stats.max_hp;
+            self.player.stats.power += 1;
+            let f = flavor::level_up(&mut self.rng);
+            self.log.push_colored(format!("{f} You are now level {}.", self.plevel), color::HP_GOOD);
+        }
+    }
+
+    // ------- the monsters' turn -------
+
+    pub fn monsters_turn(&mut self) {
+        let ppos = self.player.pos;
+        let mut occ: HashSet<Point> = self.monsters.iter().map(|m| m.pos).collect();
+        occ.insert(ppos);
+
+        let mut i = 0;
+        while i < self.monsters.len() {
+            // the borrow checker HATED this. i can't just hand `self` to decide()
+            // because it needs to look at the other monsters AND move this one.
+            // so i split the borrow of self up by hand (map, rng, and this one
+            // monster), and use the snapshot `occ` set for who's standing where
+            // instead of touching self again. took me ages to get to compile.
+            let intent = {
+                let map = &self.map;
+                let rng = &mut self.rng;
+                let m = &mut self.monsters[i];
+                let self_pos = m.pos;
+                let occupied = |p: Point| p != self_pos && occ.contains(&p);
+                ai::decide(m, ppos, map, &occupied, rng)
+            };
+            match intent {
+                Intent::Attack => {
+                    let name = self.monsters[i].name.clone();
+                    let power = self.monsters[i].stats.power;
+                    let def = self.player_defense();
+                    let killed = combat::attack(&name, power, def, &mut self.player, &mut self.rng, &mut self.log);
+                    if killed {
+                        self.epitaph = flavor::epitaph(&mut self.rng);
+                        self.state = State::Dead;
+                        return;
+                    }
+                }
+                Intent::Step(to) => {
+                    if !occ.contains(&to) {
+                        let from = self.monsters[i].pos;
+                        occ.remove(&from);
+                        occ.insert(to);
+                        self.monsters[i].pos = to;
+                    }
+                }
+                Intent::Wait => {}
+            }
+            i += 1;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Game, State};
+    use crate::rng::Rng;
+
+    // Drive the game through many random turns across several seeds; it must
+    // never panic and core invariants must always hold.
+    #[test]
+    fn random_play_is_stable() {
+        for seed in 0..8u64 {
+            let mut g = Game::new(seed.wrapping_mul(0x9E37_79B9));
+            let mut rng = Rng::new(seed ^ 0xABCD);
+            for _ in 0..3000 {
+                if g.state != State::Playing {
+                    g = Game::new(rng.next_u64());
+                }
+                match rng.below(9) {
+                    0 => { g.player_move(-1, 0); }
+                    1 => { g.player_move(1, 0); }
+                    2 => { g.player_move(0, -1); }
+                    3 => { g.player_move(0, 1); }
+                    4 => { g.player_move(1, 1); }
+                    5 => { g.pickup(); }
+                    6 => {
+                        if !g.pack.is_empty() {
+                            let idx = rng.below(g.pack.len() as u32) as usize;
+                            g.use_item(idx);
+                        }
+                    }
+                    7 => { g.descend(); }
+                    _ => { g.wait(); }
+                }
+                if g.state == State::Playing {
+                    g.monsters_turn();
+                }
+                assert!(g.player.stats.hp <= g.player.stats.max_hp);
+                assert!(g.map.in_bounds(g.player.pos));
+                assert!(g.depth >= 1);
+            }
+        }
+    }
 }
