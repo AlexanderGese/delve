@@ -140,8 +140,10 @@ fn deserialize(data: &str) -> Option<Game> {
     if next()? != "GRAVEMISTAKES 1" {
         return None;
     }
-    let r = ints(next()?, "rng ")?;
-    let rng = Rng::from_state(*r.first()? as u64, *r.get(1)? as u64);
+    // NOTE: parse these as u64, not i64! the rng state can be bigger than
+    // i64::MAX and my load kept silently failing until i figured that out
+    let mut rp = next()?.strip_prefix("rng ")?.split_whitespace();
+    let rng = Rng::from_state(rp.next()?.parse().ok()?, rp.next()?.parse().ok()?);
 
     let pr = ints(next()?, "prog ")?;
     let (depth, plevel, xp, next_xp, gold, turns) = (
