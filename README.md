@@ -56,4 +56,3 @@ cargo run --release
 - Map is one flat vector indexed as 2D
 - Own save format (no serde) — dumps map, monsters, inventory, and RNG state to a text file
 
-Built over five evenings. Learned a ton of Rust.
