@@ -1,19 +1,16 @@
 # Delve
 
-A little roguelike game I made. It all runs in the terminal - no graphics
-at all, just coloured letters. You are the `@`, you go down into a dungeon, you
-fight things, you grab loot, and eventually you die. Usually pretty fast.
-
-```
-        ########
-        #......#      r
-   #####+......#######.#
-   #.........@........>#
-   #####.....#######.###
-       #!....#     #...#
-       ######      #.g.#
-                   #####
-```
+- A little roguelike I made in Rust, all in the terminal with no graphics, just coloured letters
+- You're the `@`. Go down into a dungeon, fight things, grab loot, and eventually die (usually fast)
+- Same seed always gives the same dungeon
+    ########
+    #......#      r
+#####+......#######.#
+#.........@........>#
+#####.....#######.###
+#!....#     #...#
+######      #.g.#
+#####
 
 ## How to play
 
@@ -21,42 +18,50 @@ fight things, you grab loot, and eventually you die. Usually pretty fast.
 cargo run --release
 ```
 
-Controls (there's a help screen on `?` too):
+- WASD / arrows / hjkl — move (walk into a monster to hit it)
+- yubn — move diagonally
+- e — interact (grab loot or take the stairs)
+- g / , — pick up
+- i — inventory (drink / read / equip)
+- `>` — go down the stairs
+- `.` — wait a turn
+- m / esc — menu (save + quit)
+- q — quit
+- `?` — help screen
+## Install option 
+```sh
+cargo install delve-rl
+```
 
-| keys | what it does |
-|------|------|
-| WASD / arrows / hjkl | move (walk into a monster to hit it) |
-| yubn | move diagonally |
-| e | interact - grab loot or take the stairs |
-| g / , | pick up |
-| i | inventory (drink/read/equip) |
-| > | go down the stairs |
-| . | wait a turn |
-| m / esc | menu (save + quit) |
-| q | quit |
 
 ## Building
 
-You just need rust + any terminal.
+- Just need Rust and any terminal
+- Only dependency is `crossterm` for drawing. Everything else is hand-written
 
 ```sh
 cargo build --release
 cargo run --release
 ```
 
-## Stuff it has so far
+## What it has
 
-- random dungeon generation (rooms + corridors)
-- field of view so you can only see what's near you (rest stays dim)
-- fighting, hp, xp and levelling up
-- monsters that chase you when they see you (they use A* to find you)
-- potions / scrolls / weapons / armour + an inventory
-- it gets harder the deeper you go
-- saving (it writes to a file in your home dir)
+- Random dungeons — non-overlapping rooms joined by L-shaped corridors
+- Field of view so you only see what's near you. Visited places stay dimly lit
+- Fighting, hp, xp, and levelling up
+- Monsters that spot you with line-of-sight and chase with A* around walls, and keep chasing a few turns after losing sight
+- A full bestiary — rats and bats up top, orcs and wolves lower, ogres, trolls, demons, and a dragon deep down
+- Loot: potions, scrolls, weapons, armour, gold, and an inventory to carry it
+- Gets harder the deeper you go
+- Suspend-style saving — deleted on load, so no save-scumming death
+- Lots of silly one-liners
 
-## TODO / ideas
+## Under the hood
 
-- traps?
-- more monster types
-- maybe a boss on the last floor
-- sound? (probably not, it's a terminal game lol)
+- Own xorshift RNG instead of `rand`, so runs are seedable and reproducible
+- Player and monsters share one struct — an "ai" is the only thing that makes a monster
+- Combat: roll attacker power plus a little random, minus defender defense
+- Map is one flat vector indexed as 2D
+- Own save format (no serde) — dumps map, monsters, inventory, and RNG state to a text file
+
+Built over five evenings. Learned a ton of Rust.
