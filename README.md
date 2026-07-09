@@ -3,14 +3,6 @@
 - A little roguelike I made in Rust, all in the terminal with no graphics, just coloured letters
 - You're the `@`. Go down into a dungeon, fight things, grab loot, and eventually die (usually fast)
 - Same seed always gives the same dungeon
-    ########
-    #......#      r
-#####+......#######.#
-#.........@........>#
-#####.....#######.###
-#!....#     #...#
-######      #.g.#
-#####
 
 ## How to play
 
